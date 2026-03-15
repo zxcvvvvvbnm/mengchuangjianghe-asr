@@ -1,8 +1,13 @@
 # mengchuangjianghe-asr
 
-萌创匠盒语音转文字模块（ASR），为输入法提供高效语音输入能力，开源共建。支持**现说现转**、识别结果**修辞规整**，并封装**百度短语音识别**等真实算法。
+萌创匠盒语音转文字模块（ASR），**纯本地算法**：基于 [OpenAI Whisper](https://github.com/openai/whisper) 开源库进行优化与集成，**不调用任何第三方接口**，全部识别在本地完成。
 
-**不依赖 Android**，纯 JVM 库，任意项目添加一行依赖即可拉取使用。
+**不依赖 Android**，纯 JVM 库，一行依赖即可接入。开源算法优于闭源接口，可审计、可离线、可二次优化。
+
+## 版权与开源协议
+
+- 本库识别核心基于 **OpenAI Whisper**（[MIT License](https://github.com/openai/whisper/blob/main/LICENSE)）。
+- 使用本库时请遵守 Whisper 的 MIT 协议，并保留版权与许可声明。详见项目 **[NOTICE](NOTICE)** 文件。
 
 ## 添加依赖（一行）
 
@@ -13,7 +18,7 @@ repositories {
     maven { url = uri("https://jitpack.io") }
 }
 dependencies {
-    implementation("com.github.zxcvvvvvbnm:mengchuangjianghe-asr:1.1.0")
+    implementation("com.github.zxcvvvvvbnm:mengchuangjianghe-asr:1.3.0")
 }
 ```
 
@@ -24,49 +29,50 @@ repositories {
     maven { url 'https://jitpack.io' }
 }
 dependencies {
-    implementation 'com.github.zxcvvvvvbnm:mengchuangjianghe-asr:1.1.0'
+    implementation 'com.github.zxcvvvvvbnm:mengchuangjianghe-asr:1.3.0'
 }
 ```
 
-## 使用方式
+## 纯本地识别（推荐）
+
+需在本地部署 **Whisper**（如 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)）及模型文件，本库通过调用本地可执行程序完成识别，无任何网络请求。
 
 ```kotlin
 import com.mengchuangjianghe.asr.AsrFactory
 import com.mengchuangjianghe.asr.AsrResult
 import com.mengchuangjianghe.asr.TextRefiner
 
-// 获取默认引擎（当前为演示引擎，无需配置即可跑通）
-val engine = AsrFactory.createDefault()
+// 本地 Whisper 引擎：模型路径 + 可执行程序路径（如 whisper.cpp 编译出的 main）
+val engine = AsrFactory.createWhisper(
+    modelPath = "/path/to/ggml-base.bin",
+    executablePath = "/path/to/main"  // 或系统 PATH 下的 "main"
+)
 
-// 识别：传入 16bit 单声道 PCM 与采样率（如 16000）
-val pcmData: ByteArray = ... // 从麦克风或文件读取
+val pcmData: ByteArray = ... // 16kHz 16bit 单声道 PCM
 val result: AsrResult = engine.recognize(pcmData, 16000)
 if (result.isSuccess()) {
-    val text = TextRefiner.refine(result.text)  // 修辞规整后再上屏
+    val text = TextRefiner.refine(result.text)
     println(text)
 }
-
-// 真实算法：百度短语音识别（需在百度开放平台申请应用并换取 token）
-val baiduEngine = AsrFactory.createBaidu(token = "your_access_token")
-val baiduResult = baiduEngine.recognize(pcmData, 16000)
-
-// 或使用 HTTP 引擎对接任意 ASR 接口
-val httpEngine = AsrFactory.createHttp(
-    apiUrl = "https://your-asr-api.com/recognize",
-    apiKey = "your-api-key"
-)
-val httpResult = httpEngine.recognize(pcmData, 16000)
 ```
+
+### 部署 Whisper 本地环境
+
+1. 克隆并编译 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)，得到可执行文件 `main`。
+2. 下载 ggml 模型（如 `ggml-base.bin`）至本地目录。
+3. 将 `modelPath` 与 `executablePath` 传入 `createWhisper` 即可。
+
+## 其他用法
+
+- **仅集成测试**：`AsrFactory.createDemo()`（返回固定示例文本，不调用 Whisper）
+- **自建/第三方 HTTP 接口**（非本库算法）：`AsrFactory.createHttp(apiUrl = "...", apiKey = "...")`
 
 ## 接口说明
 
-- **AsrEngine**：语音转文字引擎接口  
-  - `recognize(pcmData: ByteArray, sampleRate: Int): AsrResult`  
-  - `isAvailable(): Boolean`  
-  - `release()`  
-- **AsrResult**：识别结果，含 `text`、`confidence`、`isFinal`  
-- **TextRefiner**：修辞规整，`refine(recognized: String): String`，去空格、句末标点等，使结果更精准可读  
-- **AsrFactory**：`createDemo()`、`createHttp(...)`、`createBaidu(token)`、`createDefault()`
+- **AsrEngine**：`recognize(pcmData, sampleRate)`、`isAvailable()`、`release()`
+- **AsrResult**：`text`、`confidence`、`isFinal`
+- **TextRefiner**：`refine(recognized)`，修辞规整
+- **AsrFactory**：`createWhisper(modelPath, executablePath)`（纯本地）、`createDemo()`、`createHttp(...)`、`createDefault()`
 
 ## 本地构建
 
@@ -76,8 +82,8 @@ val httpResult = httpEngine.recognize(pcmData, 16000)
 
 ## 版本与发布
 
-版本在 `build.gradle.kts` 中指定；通过 GitHub 打 tag（如 `1.1.0`）后，JitPack 会自动构建，依赖即可使用 `com.github.zxcvvvvvbnm:mengchuangjianghe-asr:1.1.0`。
+版本在 `build.gradle.kts` 中指定；打 tag（如 `1.3.0`）并推送到 GitHub 后，JitPack 自动构建。
 
 ## License
 
-Apache-2.0
+Apache-2.0。本库使用的 Whisper 相关组件见 [NOTICE](NOTICE)。
